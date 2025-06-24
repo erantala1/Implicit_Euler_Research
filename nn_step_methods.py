@@ -125,9 +125,12 @@ class Implicit_Euler_step(nn.Module):
     def forward(self, input_batch):
         output = input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device)))
         iter = 0
+        jacobians = []
         while iter < self.num_iters:
-            with torch.no_grad():
-                print(self.jacobian(input_batch,output))
             output = self.implicit_euler(input_batch, output)
+            with torch.no_grad():
+                jac = self.jacobian(input_batch,output).detach().cpu().squeeze(0).squeeze(1).squeeze(-1)
+                jacobians.append(jac.squeeze(0))
             iter += 1
+        self.iter_jacs = torch.stack(jacobians)
         return output
