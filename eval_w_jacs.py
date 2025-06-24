@@ -24,9 +24,9 @@ time_step = 1e-3
 lead = int((1/1e-3)*time_step)
 print(lead,'lead')
 
-#path_outputs = '/glade/derecho/scratch/erantala/project_runs/code/outputs' #this is where the saved graphs and .mat files end up
-path_outputs = "/Users/evanrantala/Desktop/ResearchProject/outputs"
-net_file_name = "/Users/evanrantala/Desktop/ResearchProject/Network_weights/chkpt_FNO_Eulerstep_implicit_lead1_epoch38.pt"
+path_outputs = '/glade/derecho/scratch/erantala/project_runs/code/outputs' #this is where the saved graphs and .mat files end up
+
+net_file_name = "/glade/derecho/scratch/erantala/project_runs/Network_weights/chkpt_FNO_Eulerstep_implicit_lead1_epoch38.pt"
 print(net_file_name)
 #change this to use a different network
 
@@ -37,7 +37,7 @@ print(step_func)
 eval_output_name = 'KS_pred_Implicit_Euler_step_FNO_jacs_for_1k'  # what to name the output file, .mat ending not needed
 print(eval_output_name)
 
-with open("/Users/evanrantala/Downloads/Training_data_pus_2_models/training_data/KS_1024.pkl", 'rb') as f: #change based on eval data location.
+with open("/glade/derecho/scratch/erantala/project_runs/KS_1024.pkl", 'rb') as f: #change based on eval data location.
     data = pickle.load(f)
 data=np.asarray(data[:,:250000])
 
@@ -52,7 +52,7 @@ print(label_test_torch.shape)
 
 time_history = 1 #time steps to be considered as input to the solver
 time_future = 1 #time steps to be considered as output of the solver
-device = 'cpu'  #change to cpu if no cuda available
+device = 'cuda'  #change to cpu if no cuda available
 
 #model parameters
 
@@ -67,9 +67,8 @@ width = 256  # input and output chasnnels to the FNO layer
 my_net = FNO1d(modes, width, time_future, time_history)
 # my_net = MLP_Net(input_size, hidden_layer_size, output_size)
 
-#my_net.load_state_dict(torch.load(net_file_name))
-my_net.load_state_dict(torch.load(net_file_name, map_location='cpu'))
-my_net.cpu() #.cuda()
+my_net.load_state_dict(torch.load(net_file_name))
+my_net.cuda()
 
 #step_method = step_func(my_net, device, time_step)
 
@@ -78,7 +77,7 @@ step_method = step_func(my_net, device, num_iters, time_step)  #for implicit met
 
 # M = int(np.floor(99998/lead))
 M = label_test_torch.shape[0] - 1
-M = 1000
+M = 100
 net_pred = np.zeros([M,np.size(label_test,1)])
 print(M)
 print('Model loaded')
@@ -87,8 +86,8 @@ noise_var = 0
 
 print('Noise number: ', noise_var)
 
-noised_input = (noise_var)*torch.randn(1,1024).cpu() #.cuda()
-noised_input = label_test_torch[0,:].cpu() + noised_input #label_test_torch[0,:].cuda()
+noised_input = (noise_var)*torch.randn(1,1024).cuda()
+noised_input = label_test_torch[0,:].cuda() + noised_input
 ygrad = torch.zeros([M,num_iters,input_size, input_size]) #added num_iters dimension 
 ygrad_truth = torch.zeros([M,num_iters,input_size, input_size])
 
@@ -108,7 +107,7 @@ for k in range(0,M):
 
     else:
 
-        net_output = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cpu()) #.cuda()
+        net_output = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cuda()) 
         net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         temp_mat = torch.autograd.functional.jacobian(step_method, net_output) #Use these for FNO
         ygrad[k] = step_method.iter_jacs
