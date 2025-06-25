@@ -26,7 +26,7 @@ print(lead,'lead')
 
 path_outputs = '/glade/derecho/scratch/erantala/project_runs/code/outputs' #this is where the saved graphs and .mat files end up
 
-net_file_name = "/glade/derecho/scratch/erantala/project_runs/Network_weights/chkpt_FNO_Eulerstep_implicit_lead1_epoch38.pt"
+net_file_name = "/glade/derecho/scratch/erantala/project_runs/chkpt_FNO_Eulerstep_implicit_lead1_epoch38.pt"
 print(net_file_name)
 #change this to use a different network
 
