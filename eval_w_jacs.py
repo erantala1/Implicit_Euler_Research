@@ -67,7 +67,7 @@ width = 256  # input and output chasnnels to the FNO layer
 my_net = FNO1d(modes, width, time_future, time_history)
 # my_net = MLP_Net(input_size, hidden_layer_size, output_size)
 
-my_net.load_state_dict(torch.load(net_file_name))
+my_net.load_state_dict(torch.load(net_file_name,weights_only=True))
 my_net.cuda()
 
 #step_method = step_func(my_net, device, time_step)
