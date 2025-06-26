@@ -127,10 +127,11 @@ class Implicit_Euler_step(nn.Module):
         iter = 0
         jacobians = []
         while iter < self.num_iters:
-            output = self.implicit_euler(input_batch, output)
+            output = self.implicit_euler(input_batch, output) #shape (1,1024,1)
             with torch.no_grad():
-                jac = self.jacobian(input_batch, output).squeeze(0,1,-1)
-                jacobians.append(jac.squeeze(0))
+                jac = self.jacobian(input_batch, output) #shape (1,1024,1,1,1024,1)
+                jac = jac.squeeze(0).squeeze(1).squeeze(1).squeeze(-1) #shape (1024,1024)
+                jacobians.append(jac)
             iter += 1
         self.iter_jacs = torch.stack(jacobians)
         return output
