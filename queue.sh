@@ -16,4 +16,4 @@ conda activate /glade/work/erantala/conda-envs/jacobian_env
 
 cd /glade/derecho/scratch/erantala/project_runs/code
 
-python -u -m eval_w_jacs.py
+python -u eval_w_jacs.py

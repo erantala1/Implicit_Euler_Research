@@ -126,11 +126,14 @@ class Implicit_Euler_step(nn.Module):
         output = input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device)))
         iter = 0
         jacobians = []
+        eigs = []
         while iter < self.num_iters:
             output = self.implicit_euler(input_batch, output) #shape (1,1024,1)
             #jac = self.jacobian(input_batch, output) #shape (1,1024,1,1,1024,1)
             jac = torch.autograd.functional.jacobian(self.implicit_euler,(input_batch,output))[1] #shape is (1,1024,1,1,1024,1)
             jac = jac.squeeze(0).squeeze(1).squeeze(1).squeeze(-1) #shape (1024,1024)
+            eig = torch.linalg.eigvals(jac)
             jacobians.append(jac)
+            eigs.append(eig)
             iter += 1
-        return output, torch.stack(jacobians)
+        return output, torch.stack(jacobians), torch.stack(eigs)
