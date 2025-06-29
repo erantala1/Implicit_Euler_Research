@@ -112,7 +112,7 @@ class Implicit_Euler_step(nn.Module):
         self.num_iters = num_iters
         # self.time_step = nn.Parameter(torch.ones(1))
         self.time_step = time_step
-        self.jacobian = torch.func.jacrev(self.implicit_euler,argnums = 1) 
+        self.jacobian = torch.func.jacrev(self.implicit_euler,argnums = 1) #
 
     def implicit_euler(self, input_batch, output):
         return input_batch.to(self.device) + self.time_step*(self.network(output.to(self.device)))
@@ -128,10 +128,10 @@ class Implicit_Euler_step(nn.Module):
         jacobians = []
         while iter < self.num_iters:
             output = self.implicit_euler(input_batch, output) #shape (1,1024,1)
-            with torch.no_grad():
+            with torch.no_grad(): #try without
                 jac = self.jacobian(input_batch, output) #shape (1,1024,1,1,1024,1)
                 jac = jac.squeeze(0).squeeze(1).squeeze(1).squeeze(-1) #shape (1024,1024)
                 jacobians.append(jac)
             iter += 1
-        self.iter_jacs = torch.stack(jacobians)
-        return output
+        #self.iter_jacs = torch.stack(jacobians)
+        return output, torch.stack(jacobians)

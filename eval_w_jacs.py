@@ -97,9 +97,8 @@ for k in range(0,M):
  
     if (k==0):
 
-        net_output = step_method(torch.reshape(noised_input,(1,input_size,1)))
-        #net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
-        ygrad[k] = step_method.iter_jacs
+        net_output, ygrad[k] = step_method(torch.reshape(noised_input,(1,input_size,1)))
+        net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         #print(sum(sum(abs(net_pred))))
         #temp_mat = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))) #Use these for FNO
         #ygrad[k] = step_method.iter_jacs 
@@ -107,10 +106,9 @@ for k in range(0,M):
 
     else:
 
-        net_output = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cuda()) 
-        #net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
+        net_output, ygrad[k] = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cuda()) 
+        net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         #temp_mat = torch.autograd.functional.jacobian(step_method, net_output) #Use these for FNO
-        ygrad[k] = step_method.iter_jacs
         #ygrad_truth[k] = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))).reshape(1,input_size, input_size)
 
     if k%10==0:
@@ -171,7 +169,7 @@ def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk):
     print('Calculation Finished')
 
     matfiledata_output = {}
-    #matfiledata_output[u'prediction'] = net_pred_chunk
+    matfiledata_output[u'prediction'] = net_pred_chunk
     # matfiledata_output[u'Truth'] = label_test_chunk
     #matfiledata_output[u'RMSE'] = pred_RMSE
     # matfiledata_output[u'Truth_FFT_x'] = truth_fspec_x
@@ -184,24 +182,7 @@ def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk):
 
     print('First save done')
     np.save(path_outputs+'/'+eval_output_name+'/'+eval_output_name+'_chunk_'+str(chunk_num), matfiledata_output)
-
-
     print('Saved main file')
-
-    if skip_factor!=0: #check if not == 0
-        matfiledata_output_skip = {}
-        #matfiledata_output_skip[u'prediction'] = net_pred_chunk[0::skip_factor,:]
-        # matfiledata_output_skip[u'Truth'] = label_test_chunk[0::skip_factor,:]
-        #matfiledata_output_skip[u'RMSE'] = pred_RMSE[0::skip_factor,:]
-        # matfiledata_output_skip[u'Truth_FFT_x'] = truth_fspec_x[0::skip_factor,:]
-        #matfiledata_output_skip[u'pred_FFT_x'] = net_pred_chunk_fspec_x[0::skip_factor,:]
-        # matfiledata_output_skip[u'Truth_FFT_dt'] = truth_fspec_dt[0::skip_factor,:]
-        # matfiledata_output_skip[u'pred_FFT_dt'] = net_pred_chunk_fspec_dt[0::skip_factor,:,:]
-        matfiledata_output_skip[u'Jacobians'] = ygrad_chunk[0::skip_factor,:]
-        #matfiledata_output_skip[u'Jacobians_truth'] = ygrad_truth_chunk[0::skip_factor,:]
-
-        
-        np.save(path_outputs+'/'+eval_output_name+'/'+eval_output_name+'_skip'+str(skip_factor)+'_chunk_'+str(chunk_num), matfiledata_output_skip)
 
 
 
