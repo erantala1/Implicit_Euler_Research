@@ -77,7 +77,7 @@ step_method = step_func(my_net, device, num_iters, time_step)  #for implicit met
 
 # M = int(np.floor(99998/lead))
 M = label_test_torch.shape[0] - 1
-M = 100
+M = 10
 net_pred = np.zeros([M,np.size(label_test,1)])
 print(M)
 print('Model loaded')
