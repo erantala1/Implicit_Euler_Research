@@ -196,7 +196,7 @@ else:
 
 prev_ind = 0
 chunk_count = 0
-num_chunks = 100
+num_chunks = M
 for chunk in np.array_split(net_pred, num_chunks):
     current_ind = prev_ind + chunk.shape[0]
     calc_save_chunk(chunk, chunk_count, ygrad[prev_ind:current_ind],eigvals[prev_ind:current_ind])
