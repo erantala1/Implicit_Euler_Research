@@ -46,7 +46,7 @@ ax.axvline(0, color='grey', lw=0.5)
 ax.axhline(0, color='grey', lw=0.5)
 
 # autoscale around small eigenvalues
-scale = 1e3                                 # enlarge if values ~1e-3
+scale = 1e6                                 # enlarge if values ~1e-3
 lim = max(np.abs(E.real).max(),
            np.abs(E.imag).max(),
            1e-4) * scale * 1.1
