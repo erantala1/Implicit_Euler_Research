@@ -72,7 +72,9 @@ def update(frame):
 
     ax.set_title(f'Eigenvalues  (time step {k})\niteration {j}')
     return sc,
-
+print((E.real != 0).any())
+diff = np.abs(E[1:] - E[:-1]).max()
+print(diff)
 total_frames = K * J
 ani = animation.FuncAnimation(fig, update, frames=total_frames,
                               init_func=init, blit=True,
