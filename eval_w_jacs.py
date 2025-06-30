@@ -77,7 +77,7 @@ step_method = step_func(my_net, device, num_iters, time_step)  #for implicit met
 
 # M = int(np.floor(99998/lead))
 M = label_test_torch.shape[0] - 1
-M = 10
+M = 300
 net_pred = np.zeros([M,np.size(label_test,1)])
 print(M)
 print('Model loaded')
@@ -118,9 +118,9 @@ print('Eval Finished')
 
 def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk,eig_chunk):
     matfiledata_output = {}
-    matfiledata_output[u'prediction'] = net_pred_chunk.numpy()
-    matfiledata_output[u'Jacobians'] = ygrad_chunk.numpy()
-    matfiledata_output[u'Eigenvalues'] = eig_chunk.numpy()
+    matfiledata_output[u'prediction'] = net_pred_chunk
+    matfiledata_output[u'Jacobians'] = ygrad_chunk
+    matfiledata_output[u'Eigenvalues'] = eig_chunk
 
     print('First save done')
     np.save(path_outputs+'/'+eval_output_name+'/'+eval_output_name+'_chunk_'+str(chunk_num), matfiledata_output)
@@ -135,7 +135,7 @@ else:
 
 prev_ind = 0
 chunk_count = 0
-num_chunks = M
+num_chunks = 100
 for chunk in np.array_split(net_pred, num_chunks):
     current_ind = prev_ind + chunk.shape[0]
     calc_save_chunk(chunk, chunk_count, ygrad[prev_ind:current_ind],eigvals[prev_ind:current_ind])
