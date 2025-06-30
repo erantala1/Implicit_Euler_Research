@@ -47,8 +47,10 @@ ax.axhline(0, color='grey', lw=0.5)
 scatters = [ax.plot([], [], 'o', ms=3, label=f'iter {j}')[0] for j in range(J)]
 ax.legend(loc='upper right', fontsize=8)
 
-real_max = np.abs(E.real).max() * 1.1
-imag_max = np.abs(E.imag).max() * 1.1
+real_max = np.abs(E.real).max()
+print(real_max)
+imag_max = np.abs(E.imag).max()
+print(imag_max)
 lim = max(real_max, imag_max, 1.0)
 ax.set_xlim(-lim, lim)
 ax.set_ylim(-lim, lim)
