@@ -47,23 +47,31 @@ ax.axhline(0, color='grey', lw=0.5)
 scatters = [ax.plot([], [], 'o', ms=3, label=f'iter {j}')[0] for j in range(J)]
 ax.legend(loc='upper right', fontsize=8)
 
-real_max = np.abs(E.real).max()
+real_max = float(np.abs(E.real).max())
 print(real_max)
-imag_max = np.abs(E.imag).max()
+imag_max = float(np.abs(E.imag).max())
 print(imag_max)
-lim = max(real_max, imag_max, 1.0)
-ax.set_xlim(-lim, lim)
-ax.set_ylim(-lim, lim)
+lim = max(real_max, imag_max)
+
+margin   = 1.1                # 10 % padding
+if lim < 1e-4:                # eigenvalues ≪ 1 → use a fixed small box
+    lim = 1e-3
+ax.set_xlim(-lim * margin,  lim * margin)
+ax.set_ylim(-lim * margin,  lim * margin)
+
+# nicer tick labels for small ranges
+ax.ticklabel_format(style="sci", scilimits=(-2, 2))
 
 def init():
     for s in scatters:
+        s.set_markersize(6)
         s.set_data([], [])
-    ax.set_title('Eigenvalues (k = 0)')
+    ax.set_title('Eigenvalues (time step = 0)')
     return scatters
 
 def update(frame):
     eig_frame = E[frame]            # (J, d)
-    ax.set_title(f'Eigenvalues (k = {frame})')
+    ax.set_title(f'Eigenvalues (time step = {frame})')
     for j, sc in enumerate(scatters):
         ev = eig_frame[j]           # (d,)
         sc.set_data(ev.real, ev.imag)
