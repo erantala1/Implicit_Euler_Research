@@ -56,8 +56,11 @@ lim = max(real_max, imag_max)
 margin   = 1.1                # 10 % padding
 if lim < 1e-4:                # eigenvalues ≪ 1 → use a fixed small box
     lim = 1e-3
-ax.set_xlim(-lim * margin,  lim * margin)
-ax.set_ylim(-lim * margin,  lim * margin)
+scale = 1e3                       # enlarge eigenvalue coordinates
+
+# axis limits after loading E
+lim = max(np.abs(E.real).max(), np.abs(E.imag).max(), 1e-4) * scale * 1.1
+ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim)
 
 # nicer tick labels for small ranges
 ax.ticklabel_format(style="sci", scilimits=(-2, 2))
@@ -70,17 +73,15 @@ def init():
     return scatters
 
 def update(frame):
-    eig_frame = E[frame]            # (J, d)
-    ax.set_title(f'Eigenvalues (time step = {frame})')
+    eig_frame = E[frame]
+    ax.set_title(f'Eigenvalues (time step k={frame})')
     for j, sc in enumerate(scatters):
-        ev = eig_frame[j]           # (d,)
+        ev = eig_frame[j] * scale
         sc.set_data(ev.real, ev.imag)
     return scatters
 
 ani = animation.FuncAnimation(fig, update, frames=K,
                               init_func=init, blit=True,
-                              interval=1000 / args.fps)
-
-print('Saving animation… (requires ffmpeg)')
-ani.save('eig_animation.mp4', fps=args.fps, dpi=120)
+                              interval=1000)        # 1 s per frame
+ani.save('eig_animation.mp4', fps=1, dpi=120)
 print('Done  →  eig_animation.mp4')
