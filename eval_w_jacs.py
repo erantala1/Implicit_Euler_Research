@@ -102,7 +102,6 @@ for k in range(0,M):
         net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         #print(sum(sum(abs(net_pred))))
         #temp_mat = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))) #Use these for FNO
-        #ygrad[k] = step_method.iter_jacs 
         #ygrad_truth[k] = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))).reshape(1,input_size, input_size)
 
     else:
@@ -117,75 +116,15 @@ for k in range(0,M):
        
 print('Eval Finished')
 
-
-'''
-#this is the fourier spectrum across a single timestep, output has rows as timestep and columns as modes
-truth_fspec_x = np.zeros(np.shape(net_pred[:,:]), dtype=complex)
-net_pred_fspec_x = np.zeros(np.shape(net_pred[:,:]), dtype=complex)
-
-for n in range(np.shape(net_pred)[0]):
-    truth_fspec_x[n,:] = np.abs(np.fft.fft(label_test[n,:])) 
-    net_pred_fspec_x[n,:] = np.abs(np.fft.fft(net_pred[n,:])) 
-
-# calculate time derivative using 1st order finite diff
-truth_dt = np.diff(label_test, n=1, axis=0)
-net_pred_dt = np.diff(net_pred, n=1, axis=0)
-
-# calculate fourier spectrum of time derivative along a single timestep
-truth_fspec_dt = np.zeros(np.shape(truth_dt[:,:]), dtype=complex)
-net_pred_fspec_dt = np.zeros(np.shape(net_pred_dt[:,:]), dtype=complex)
-
-for n in range(np.shape(net_pred_dt)[0]):
-    truth_fspec_dt[n,:] = np.abs(np.fft.fft(truth_dt[n,:])) 
-    net_pred_fspec_dt[n,:] = np.abs(np.fft.fft(net_pred_dt[n,:])) 
-
-
-ygrad = ygrad.detach().cpu().numpy()
-
-def RMSE(y_hat, y_true):
-    return np.sqrt(np.mean((y_hat - y_true)**2, axis=1, keepdims=True)) 
-'''
 def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk,eig_chunk):
-    #pred_RMSE = np.zeros([net_pred_chunk.shape[0]])
-    # truth_fspec_x = np.zeros(np.shape(net_pred_chunk[:,:]), dtype=complex)
-    #net_pred_chunk_fspec_x = np.zeros(np.shape(net_pred_chunk[:,:]), dtype=complex)
-    # truth_dt = np.diff(label_test_chunk, n=1, axis=0)
-    # net_pred_chunk_dt = np.diff(net_pred_chunk, n=1, axis=0)
-    # truth_fspec_dt = np.zeros(np.shape(truth_dt[:,:]), dtype=complex)
-    # net_pred_chunk_fspec_dt = np.zeros(np.shape(net_pred_chunk_dt[:,:,:]), dtype=complex)
-
-    #this is the fourier spectrum across a single timestep, output has rows as timestep and columns as modes
-
-    #pred_RMSE = RMSE(net_pred_chunk, label_test_chunk[0:net_pred_chunk.shape[0]]).reshape(-1)
-
-    # for n in range(np.shape(net_pred_chunk)[0]):
-    #     # truth_fspec_x[n,:] = np.abs(np.fft.fft(label_test_chunk[n,:])) 
-    #     net_pred_chunk_fspec_x[n ,:] = np.abs(np.fft.fft(net_pred_chunk[n, :])) 
-
-    # for n in range(np.shape(net_pred_chunk_dt)[0]):
-    #     # truth_fspec_dt[n,:] = np.abs(np.fft.fft(truth_dt[n,:])) 
-    #     net_pred_chunk_fspec_dt[n, ens, :] = np.abs(np.fft.fft(net_pred_chunk_dt[n, ens, :])) 
-
-    #net_pred_chunk_fspec_x = np.abs(np.fft.fft(net_pred_chunk[:], axis=1)) 
-    print('Calculation Finished')
-
     matfiledata_output = {}
-    matfiledata_output[u'prediction'] = net_pred_chunk
-    # matfiledata_output[u'Truth'] = label_test_chunk
-    #matfiledata_output[u'RMSE'] = pred_RMSE
-    # matfiledata_output[u'Truth_FFT_x'] = truth_fspec_x
-    #matfiledata_output[u'pred_FFT_x'] = net_pred_chunk_fspec_x
-    # matfiledata_output[u'Truth_FFT_dt'] = truth_fspec_dt
-    # matfiledata_output[u'pred_FFT_dt'] = net_pred_chunk_fspec_dt
-    matfiledata_output[u'Jacobians'] = ygrad_chunk
-    #matfiledata_output[u'Jacobians_truth'] = ygrad_truth_chunk
-    matfiledata_output[u'Eigenvalues'] = eig_chunk
-
+    matfiledata_output[u'prediction'] = net_pred_chunk.numpy()
+    matfiledata_output[u'Jacobians'] = ygrad_chunk.numpy()
+    matfiledata_output[u'Eigenvalues'] = eig_chunk.numpy()
 
     print('First save done')
     np.save(path_outputs+'/'+eval_output_name+'/'+eval_output_name+'_chunk_'+str(chunk_num), matfiledata_output)
     print('Saved main file')
-
 
 
 if not os.path.exists(path_outputs+'/'+eval_output_name+'/'):
