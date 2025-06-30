@@ -135,7 +135,7 @@ class Implicit_Euler_step(nn.Module):
             eig = torch.linalg.eigvals(jac) # [1024]
             jacobians.append(jac)
             eigs.append(eig) #[[1024]]
-            if iter == 0 and k == 0:     # only first outer step
+            if iter == 0:     # only first outer step
                 print("J[0,0:5] =", jac[0,:5])
                 print("||J - I||", torch.norm(jac - torch.eye(1024)).item())
             iter += 1
