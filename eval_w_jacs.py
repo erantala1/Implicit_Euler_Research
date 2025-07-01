@@ -89,7 +89,7 @@ print('Noise number: ', noise_var)
 noised_input = (noise_var)*torch.randn(1,1024).cuda()
 noised_input = label_test_torch[0,:].cuda() + noised_input
 ygrad = torch.zeros([M,num_iters,input_size, input_size]) #added num_iters dimension 
-eigvals = torch.zeros((M,num_iters, input_size),dtype=torch.cfloat)
+eigvals = torch.zeros([M,num_iters, input_size],dtype=torch.cfloat)
 #ygrad_truth = torch.zeros([M,num_iters,input_size, input_size])
 
 print(noised_input.size())
