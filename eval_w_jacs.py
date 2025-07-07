@@ -21,12 +21,12 @@ from nn_step_methods import *
 skip_factor = 0 #Number of timesteps to skip (to make the saved data smaller), set to zero to not save a skipped version
 
 time_step = 1e-3
-lead = int((1/1e-3)*time_step)
+lead = int((1/1e-3)*time_step*100)
 print(lead,'lead')
 
 path_outputs = '/glade/derecho/scratch/erantala/project_runs/outputs' #this is where the saved graphs and .mat files end up
 
-net_file_name = "/glade/derecho/scratch/erantala/project_runs/chkpt_FNO_Eulerstep_implicit_lead1_epoch38.pt"
+net_file_name = "/glade/derecho/scratch/erantala/project_runs/chkpt_FNO_Eulerstep_implicit_lead100_v2_epoch38.pt"
 print(net_file_name)
 #change this to use a different network
 
@@ -34,7 +34,7 @@ step_func = Implicit_Euler_step#this determines the step funciton used in the ev
 
 print(step_func)
 
-eval_output_name = 'KS_pred_Implicit_Euler_step_FNO_jacs_for_1k'  # what to name the output file, .mat ending not needed
+eval_output_name = 'KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100'  # what to name the output file, .mat ending not needed
 print(eval_output_name)
 
 with open("/glade/derecho/scratch/erantala/project_runs/KS_1024.pkl", 'rb') as f: #change based on eval data location.
