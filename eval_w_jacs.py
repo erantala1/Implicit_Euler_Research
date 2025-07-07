@@ -90,6 +90,7 @@ noised_input = (noise_var)*torch.randn(1,1024).cuda()
 noised_input = label_test_torch[0,:].cuda() + noised_input
 ygrad = torch.zeros([M,num_iters,input_size, input_size]) #added num_iters dimension 
 eigvals = torch.zeros([M,num_iters, input_size],dtype=torch.cfloat)
+eigvecs = torch.zeros([M,num_iters,input_size,input_size],dtype = torch.cfloat)
 #ygrad_truth = torch.zeros([M,num_iters,input_size, input_size])
 
 print(noised_input.size())
@@ -98,7 +99,7 @@ for k in range(0,M):
  
     if (k==0):
 
-        net_output, ygrad[k],eigvals[k] = step_method(torch.reshape(noised_input,(1,input_size,1)))
+        net_output, ygrad[k],eigvals[k],eigvecs[k] = step_method(torch.reshape(noised_input,(1,input_size,1)))
         net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         #print(sum(sum(abs(net_pred))))
         #temp_mat = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))) #Use these for FNO
@@ -106,7 +107,7 @@ for k in range(0,M):
 
     else:
 
-        net_output, ygrad[k],eigvals[k] = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cuda()) 
+        net_output, ygrad[k],eigvals[k],eigvecs[k] = step_method(torch.reshape(torch.from_numpy(net_pred[k-1,:]),(1,input_size,1)).float().cuda()) 
         net_pred [k,:] = torch.reshape(net_output,(1,input_size)).detach().cpu().numpy()
         #temp_mat = torch.autograd.functional.jacobian(step_method, net_output) #Use these for FNO
         #ygrad_truth[k] = torch.autograd.functional.jacobian(step_method, torch.reshape(input_test_torch[k,:],(1,input_size,1))).reshape(1,input_size, input_size)
@@ -116,11 +117,12 @@ for k in range(0,M):
        
 print('Eval Finished')
 
-def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk,eig_chunk):
+def calc_save_chunk(net_pred_chunk,chunk_num, ygrad_chunk,eig_chunk,eig_vec_chunk):
     matfiledata_output = {}
     matfiledata_output[u'prediction'] = net_pred_chunk
     matfiledata_output[u'Jacobians'] = ygrad_chunk
     matfiledata_output[u'Eigenvalues'] = eig_chunk
+    matfiledata_output[u'Eigenvectors'] = eig_vec_chunk
 
     print('First save done')
     np.save(path_outputs+'/'+eval_output_name+'/'+eval_output_name+'_chunk_'+str(chunk_num), matfiledata_output)
@@ -138,7 +140,7 @@ chunk_count = 0
 num_chunks = 100
 for chunk in np.array_split(net_pred, num_chunks):
     current_ind = prev_ind + chunk.shape[0]
-    calc_save_chunk(chunk, chunk_count, ygrad[prev_ind:current_ind],eigvals[prev_ind:current_ind])
+    calc_save_chunk(chunk, chunk_count, ygrad[prev_ind:current_ind],eigvals[prev_ind:current_ind],eigvecs[prev_ind:current_ind])
     prev_ind = current_ind
     print(chunk_count, prev_ind)
     chunk_count += 1
