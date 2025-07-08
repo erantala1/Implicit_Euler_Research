@@ -33,8 +33,8 @@ for f in files:
     blk = np.load(f, allow_pickle=True).item()
     if blk['Eigenvalues'].shape[0] == 0:   # skip empty chunks
         continue
-    eig_vals.append(blk['Eigenvalues'].astype(np.complex64))   # (c,J,d)
-    eig_vecs.append(blk['Eigenvectors'].astype(np.complex64))  # (c,J,d,d)
+    eig_vals.append(blk['Eigenvalues'])   # (c,J,d)
+    eig_vecs.append(blk['Eigenvectors'])  # (c,J,d,d)
 
 E  = np.concatenate(eig_vals, axis=0)   # (K,J,d)
 V  = np.concatenate(eig_vecs, axis=0)   # (K,J,d,d)
