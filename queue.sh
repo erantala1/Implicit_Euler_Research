@@ -16,4 +16,4 @@ conda activate /glade/work/erantala/conda-envs/jacobian_env
 
 cd /glade/derecho/scratch/erantala/project_runs/code
 
-python -u eval_w_jacs.py
+ python -u eigen_analysis.py /glade/derecho/scratch/erantala/project_runs/outputs/KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100
