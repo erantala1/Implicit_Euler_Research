@@ -7,7 +7,7 @@ import matplotlib.animation as animation
 ap = argparse.ArgumentParser(
     description="""Animate eigenvalues (real vs imaginary) stored in *_chunk_*.npy files.""")
 ap.add_argument('folder', help='Directory that contains the chunk files')
-ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_1k',
+ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100',
                 help='Filename prefix before _chunk_<n>.npy')
 ap.add_argument('--chunks', nargs='*', type=int,
                 help='Chunk numbers to load (default: all in folder)')
@@ -47,7 +47,7 @@ ax.set_ylabel('Im(λ)')
 ax.axvline(0, color='grey', lw=0.5)
 ax.axhline(0, color='grey', lw=0.5)
 
-scale = 1
+scale = 1e3
 lim = max(np.abs(E.real).max(),
            np.abs(E.imag).max(),
            1e-4) * scale * 1.1
@@ -82,5 +82,5 @@ ani = animation.FuncAnimation(fig, update, frames=total_frames,
                               repeat=False)
 
 print('Saving animation… (requires ffmpeg)')
-ani.save('eig_animation.mp4', fps=8, dpi=120) 
+ani.save('eig_animation_lead_100.mp4', fps=8, dpi=120) 
 print('Done  →  eig_animation.mp4')
