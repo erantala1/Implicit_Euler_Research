@@ -1,84 +1,98 @@
+#!/usr/bin/env python3
+"""
+Animate eigen-values and show eigen-vector drift.
+
+Assumes each *_chunk_*.npy contains
+    'Eigenvalues' : (chunk, J, d)  complex
+    'Eigenvectors': (chunk, J, d, d)  complex   ← columns = eigen-vectors
+"""
+
 import argparse, glob
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-ap = argparse.ArgumentParser(
-    description="""Animate eigenvalues (real vs imaginary) stored in *_chunk_*.npy files.""")
-ap.add_argument('folder', help='Directory that contains the chunk files')
-ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_1k',
-                help='Filename prefix before _chunk_<n>.npy')
-ap.add_argument('--chunks', nargs='*', type=int,
-                help='Chunk numbers to load (default: all in folder)')
-ap.add_argument('--fps', type=int, default=6, help='Frames per second')
+# ---------------------------------------------------------------- CLI
+ap = argparse.ArgumentParser(description="Animate eigenvalues and vector drift")
+ap.add_argument('folder', help='Directory that holds *_chunk_*.npy files')
+ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100')
+ap.add_argument('--fps', type=int, default=6)
+ap.add_argument('--save', default='eig_animation_lead_100.mp4',
+                help='Filename for the MP4 animation')
 args = ap.parse_args()
 
 folder  = Path(args.folder).expanduser()
-pattern = str(folder / f'{args.prefix}_chunk_*.npy')
-files   = sorted(glob.glob(pattern))
-
-if args.chunks is not None:
-    files = [f for f in files
-             if int(f.split('_chunk_')[-1].split('.npy')[0]) in args.chunks]
-
+files   = sorted(glob.glob(str(folder / f'{args.prefix}_chunk_*.npy')))
 if not files:
-    raise FileNotFoundError(f'No chunk files found for pattern: {pattern}')
+    raise FileNotFoundError("No chunk files found")
 
-print(f'Loading {len(files)} chunk(s)…')
-eigs_list = []
+# ---------------------------------------------------------------- load
+eig_vals, eig_vecs = [], []
 for f in files:
-    block = np.load(f, allow_pickle=True).item()
-    if 'Eigenvalues' not in block:
-        raise KeyError(f"'Eigenvalues' key missing in {f}")
-    eigs_list.append(block['Eigenvalues'])
-    print(f'  {Path(f).name:<40}  {block["Eigenvalues"].shape}')
+    blk = np.load(f, allow_pickle=True).item()
+    if blk['Eigenvalues'].shape[0] == 0:   # skip empty chunks
+        continue
+    eig_vals.append(blk['Eigenvalues'].astype(np.complex64))   # (c,J,d)
+    eig_vecs.append(blk['Eigenvectors'].astype(np.complex64))  # (c,J,d,d)
 
-E = np.concatenate(eigs_list, axis=0) 
+E  = np.concatenate(eig_vals, axis=0)   # (K,J,d)
+V  = np.concatenate(eig_vecs, axis=0)   # (K,J,d,d)
 K, J, d = E.shape
-print(f'\nTotal outer steps K={K},  inner iterations J={J},  state dim d={d}')
+print(f'Loaded  eigenvalues: {E.shape}  eigenvectors: {V.shape}')
 
-#animation
-fig, ax = plt.subplots(figsize=(6, 6))
+# ---------------------------------------------------------------- eigen-value animation (auto-limits)
+fig, ax = plt.subplots(figsize=(6,6))
 ax.set_xlabel('Re(λ)')
 ax.set_ylabel('Im(λ)')
-ax.axvline(0, color='grey', lw=0.5)
-ax.axhline(0, color='grey', lw=0.5)
-
-scale = 1
-lim = max(np.abs(E.real).max(),
-           np.abs(E.imag).max(),
-           1e-4) * scale * 1.1
-ax.set_xlim(-1, 1)
-ax.set_ylim(-1, 1)
 ax.set_aspect('equal', 'box')
-ax.ticklabel_format(style="sci", scilimits=(-2, 2))
+ax.ticklabel_format(style="sci", scilimits=(-2,2))
+colors = plt.cm.viridis(np.linspace(0,1,J))
+scatters = [ax.plot([], [], 'o', ms=4, color=colors[j])[0] for j in range(J)]
 
-sc = ax.plot([], [], 'o', ms=4)[0]
+def set_window(ev_block):
+    """auto-zoom to current cloud with 10% margin"""
+    rmax = np.abs(ev_block - ev_block.mean()).max()
+    rmax = max(rmax, 1e-8)            # avoid zero window
+    half = rmax * 1.1
+    cx, cy = ev_block.real.mean(), ev_block.imag.mean()
+    ax.set_xlim(cx-half, cx+half)
+    ax.set_ylim(cy-half, cy+half)
 
 def init():
-    sc.set_data([], [])
-    ax.set_title('Eigenvalues  (time step 0)\niteration 0')
-    return sc,
+    for s in scatters: s.set_data([], [])
+    set_window(E[0,0])
+    ax.set_title('λ,  time 0  iter 0')
+    return scatters
 
 def update(frame):
-    k = frame // J                
-    j = frame %  J
+    k = frame // J          # outer step
+    j = frame %  J          # inner iteration
+    ev = E[k,j]             # (d,)
+    set_window(ev)
+    ax.set_title(f'λ,  time {k}  iter {j}')
+    for jj, sc in enumerate(scatters):
+        sc.set_data(E[k,jj].real, E[k,jj].imag)
+    return scatters
 
-    ev = E[k, j] * scale 
-    sc.set_data(ev.real, ev.imag)
-
-    ax.set_title(f'Eigenvalues  (time step {k})\niteration {j}')
-    return sc,
-print((E.real != 0).any())
-diff = np.abs(E[1:] - E[:-1]).max()
-print(diff)
-total_frames = K * J
-ani = animation.FuncAnimation(fig, update, frames=total_frames,
+ani = animation.FuncAnimation(fig, update, frames=K*J,
                               init_func=init, blit=True,
-                              interval=1000,
-                              repeat=False)
+                              interval=1000/args.fps)
+print('saving animation …')
+ani.save(args.save, fps=args.fps, dpi=120)
+print('saved as', args.save)
 
-print('Saving animation… (requires ffmpeg)')
-ani.save('eig_animation.mp4', fps=8, dpi=120) 
-print('Done  →  eig_animation.mp4')
+# ---------------------------------------------------------------- eigen-vector drift plot
+# Frobenius norm ‖V_{k+1} − V_k‖  averaged over iterations
+drift = np.linalg.norm(V[1:] - V[:-1], axis=(2,3))   # (K-1, J)
+mean_drift = drift.mean(axis=1)                      # (K-1,)
+
+plt.figure(figsize=(7,3))
+plt.plot(range(1,K), mean_drift, lw=1.5)
+plt.xlabel('time step k')
+plt.ylabel('‖Δ eigenvectors‖_F  (avg over iter)')
+plt.title('Eigen-vector change per time step')
+plt.grid(alpha=.3)
+plt.tight_layout()
+plt.savefig('eigvec_drift_lead_100.png', dpi=120)
+print('saved eigen-vector drift plot → eigvec_drift.png')
