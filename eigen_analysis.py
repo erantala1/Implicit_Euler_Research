@@ -11,7 +11,11 @@ ap.add_argument('--fps', type=int, default=8)
 args = ap.parse_args()
 
 folder  = Path(args.folder).expanduser()
-files   = sorted(glob.glob(str(folder / f'{args.prefix}_chunk_*.npy')))
+pattern = folder / f'{args.prefix}_chunk_*.npy'
+files   = sorted(
+    glob.glob(str(pattern)),
+    key=lambda s: int(s.split('_chunk_')[-1].split('.npy')[0])
+)
 if not files:
     raise FileNotFoundError('no chunk files')
 
