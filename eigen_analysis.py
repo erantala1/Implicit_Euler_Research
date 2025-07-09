@@ -19,7 +19,7 @@ eig_vals = []
 drift_blocks = []
 prev_tail = None
 for f in files:
-    blk = np.load(f, allow_pickle=True, mmap_mode='r')
+    blk = np.load(f, allow_pickle=True)
     ev = blk['Eigenvalues']
     if ev.shape[0] == 0: continue 
     eig_vals.append(ev)
