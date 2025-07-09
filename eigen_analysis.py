@@ -4,42 +4,47 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-ap = argparse.ArgumentParser(
-    description="""Animate eigenvalues (real vs imaginary) stored in *_chunk_*.npy files.""")
-ap.add_argument('folder', help='Directory that contains the chunk files')
-ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100',
-                help='Filename prefix before _chunk_<n>.npy')
-ap.add_argument('--chunks', nargs='*', type=int,
-                help='Chunk numbers to load (default: all in folder)')
+ap = argparse.ArgumentParser()
+ap.add_argument('folder')
+ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100')
+ap.add_argument('--fps', type=int, default=8)
 args = ap.parse_args()
 
 folder  = Path(args.folder).expanduser()
-pattern = str(folder / f'{args.prefix}_chunk_*.npy')
-files   = sorted(glob.glob(pattern))
-
-if args.chunks is not None:
-    files = [f for f in files
-             if int(f.split('_chunk_')[-1].split('.npy')[0]) in args.chunks]
-
+files   = sorted(glob.glob(str(folder / f'{args.prefix}_chunk_*.npy')))
 if not files:
-    raise FileNotFoundError(f'No chunk files found for pattern: {pattern}')
+    raise FileNotFoundError('no chunk files')
 
-print(f'Loading {len(files)} chunk(s)…')
-eigs_list = []
-eigvecs_list = []
+eig_vals = []
+drift_blocks = []
+prev_tail = None
 for f in files:
-    block = np.load(f, allow_pickle=True).item()
-    if 'Eigenvalues' not in block:
-        raise KeyError(f"'Eigenvalues' key missing in {f}")
-    eigs_list.append(block['Eigenvalues'])
-    eigvecs_list.append(block['Eigenvectors'])
-    print(f'  {Path(f).name:<40}  {block["Eigenvalues"].shape}')
-    print(f'  {Path(f).name:<40}  {block["Eigenvectors"].shape}')
+    blk = np.load(f, allow_pickle=True, mmap_mode='r')
+    ev = blk['Eigenvalues']
+    if ev.shape[0] == 0: continue 
+    eig_vals.append(ev)
+    print(Path(f).name, ev.shape)
+    V = blk['Eigenvectors']
+    if V.shape[0] == 0:
+        continue
 
-E = np.concatenate(eigs_list, axis=0) 
-V = np.concatenate(eigvecs_list,axis=0)
+    inner = np.linalg.norm(V[1:] - V[:-1], axis=(2,3))
+    drift_blocks.append(inner)
+
+    if prev_tail is not None:
+        cross = np.linalg.norm(V[0] - prev_tail, axis=(1,2))
+        drift_blocks.append(cross[None, :])
+
+    prev_tail = V[-1]
+    del V, blk 
+
+E = np.concatenate(eig_vals, axis=0)
 K, J, d = E.shape
-print(f'\nTotal outer steps K={K},  inner iterations J={J},  state dim d={d}')
+print(f'\nEigen-values assembled:  {E.shape}')
+
+drift = np.concatenate(drift_blocks, axis=0)
+mean_drift = drift.mean(axis=1) 
+print('drift array shape', drift.shape)
 
 fig, ax = plt.subplots(figsize=(6,6))
 ax.set_xlabel('Re(λ)')
@@ -49,26 +54,25 @@ ax.ticklabel_format(style="sci", scilimits=(-2,2))
 colors = plt.cm.viridis(np.linspace(0,1,J))
 scatters = [ax.plot([], [], 'o', ms=4, color=colors[j])[0] for j in range(J)]
 
-def set_window(ev_block):
-    rmax = np.abs(ev_block - ev_block.mean()).max()
-    rmax = max(rmax, 1e-8)            # avoid zero window
-    half = rmax * 1.1
-    cx, cy = ev_block.real.mean(), ev_block.imag.mean()
-    ax.set_xlim(cx-half, cx+half)
-    ax.set_ylim(cy-half, cy+half)
+def set_window(ev):
+    r = np.abs(ev - ev.mean()).max()
+    r = max(r, 1e-10)
+    half = 1.1 * r
+    c = ev.mean()
+    ax.set_xlim(c.real-half, c.real+half)
+    ax.set_ylim(c.imag-half, c.imag+half)
 
 def init():
-    for s in scatters: s.set_data([], [])
+    for s in scatters: s.set_data([],[])
     set_window(E[0,0])
-    ax.set_title('λ,  time 0  iter 0')
+    ax.set_title('λ  t=0 iter=0')
     return scatters
 
 def update(frame):
-    k = frame // J          # outer step
-    j = frame %  J          # inner iteration
-    ev = E[k,j]             # (d,)
+    k, j = divmod(frame, J)
+    ev = E[k, j]
     set_window(ev)
-    ax.set_title(f'λ,  time {k}  iter {j}')
+    ax.set_title(f'λ  t={k} iter={j}')
     for jj, sc in enumerate(scatters):
         sc.set_data(E[k,jj].real, E[k,jj].imag)
     return scatters
@@ -76,21 +80,14 @@ def update(frame):
 ani = animation.FuncAnimation(fig, update, frames=K*J,
                               init_func=init, blit=True,
                               interval=1000/args.fps)
-print('saving animation …')
-ani.save('eig_animation_lead_100.mp4', fps=8, dpi=120)
-print('saved as', args.save)
-
-# ---------------------------------------------------------------- eigen-vector drift plot
-# Frobenius norm ‖V_{k+1} − V_k‖  averaged over iterations
-drift = np.linalg.norm(V[1:] - V[:-1], axis=(2,3))   # (K-1, J)
-mean_drift = drift.mean(axis=1)                      # (K-1,)
+ani.save('eig_animation_lead_100.mp4', dpi=120, fps=args.fps)
+print('saved eig_animation_lead_100.mp4')
 
 plt.figure(figsize=(7,3))
-plt.plot(range(1,K), mean_drift, lw=1.5)
+plt.plot(range(1,K), mean_drift)
 plt.xlabel('time step k')
-plt.ylabel('‖Δ eigenvectors‖_F  (avg over iter)')
-plt.title('Eigen-vector change per time step')
+plt.ylabel('avg ‖Δvec‖_F')
 plt.grid(alpha=.3)
 plt.tight_layout()
-plt.savefig('eigvec_diff_lead_100.png', dpi=120)
-print('saved eigen-vector diff plot → eigvec_diff.png')
+plt.savefig('eigvec_drift_lead_100.png', dpi=120)
+print('saved eigvec_drift_lead_100.png')
