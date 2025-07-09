@@ -7,7 +7,7 @@ import matplotlib.animation as animation
 ap = argparse.ArgumentParser()
 ap.add_argument('folder')
 ap.add_argument('--prefix', default='KS_pred_Implicit_Euler_step_FNO_jacs_for_lead_100')
-ap.add_argument('--fps', type=int, default=8)
+ap.add_argument('--fps', type=int, default=16)
 args = ap.parse_args()
 
 folder  = Path(args.folder).expanduser()
@@ -19,18 +19,27 @@ files   = sorted(
 if not files:
     raise FileNotFoundError('no chunk files')
 
+def align_eigpairs(ev, V):
+    idx = np.argsort(ev.real)
+    ev  = ev[idx]
+    V   = V[:, idx]
+    V   = V / np.sign(V[0:1, :]) 
+    return ev, V
+
 eig_vals = []
 drift_blocks = []
 prev_tail = None
+
 for f in files:
     blk = np.load(f, allow_pickle=True).item()
-    ev = blk['Eigenvalues']
-    if ev.shape[0] == 0: continue 
-    eig_vals.append(ev)
-    print(Path(f).name, ev.shape)
-    V = blk['Eigenvectors']
-    if V.shape[0] == 0:
-        continue
+    ev = blk['Eigenvalues'] 
+    V  = blk['Eigenvectors']
+
+    for m in range(ev.shape[0]):
+        for j in range(ev.shape[1]):
+            ev[m, j], V[m, j] = align_eigpairs(ev[m, j], V[m, j])
+
+    eig_vals.append(ev) 
 
     inner = np.linalg.norm(V[1:] - V[:-1], axis=(2,3))
     drift_blocks.append(inner)
@@ -40,7 +49,7 @@ for f in files:
         drift_blocks.append(cross[None, :])
 
     prev_tail = V[-1]
-    del V, blk 
+    del V, blk
 
 E = np.concatenate(eig_vals, axis=0)
 K, J, d = E.shape
@@ -59,12 +68,12 @@ colors = plt.cm.viridis(np.linspace(0,1,J))
 scatters = [ax.plot([], [], 'o', ms=4, color=colors[j])[0] for j in range(J)]
 
 def set_window(ev):
-    r = np.abs(ev - ev.mean()).max()
-    r = max(r, 1e-10)
-    half = 1.1 * r
+    rmax = np.abs(ev - ev.mean()).max()
+    half = 1.05 * max(rmax, 1e-10)
     c = ev.mean()
     ax.set_xlim(c.real-half, c.real+half)
     ax.set_ylim(c.imag-half, c.imag+half)
+    ax.ticklabel_format(style='plain')  
 
 def init():
     for s in scatters: s.set_data([],[])
