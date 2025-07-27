@@ -143,7 +143,7 @@ for ep in range(starting_epoch, epochs+1):
         optimizer.step()
         optimizer_hyper.step()
         running_loss += loss.detach().item()
-        # print(loss)
+        print(loss)
 
     net_loss = (running_loss/(train_data.shape[0]))
     key = np.random.randint(len(test_data))
