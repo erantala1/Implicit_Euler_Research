@@ -1,0 +1,16 @@
+name: jacobian_env
+channels:
+  - conda-forge
+  - r
+dependencies:
+  - cudatoolkit
+  - jupyterlab
+  - matplotlib
+  - numpy
+  - python=3.11
+  - pytorch-cuda==12.1
+  - scipy
+  - pytorch
+  - torchaudio
+  - torchvision
+  - wandb
