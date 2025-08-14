@@ -143,6 +143,7 @@ class Implicit_Euler_step(nn.Module):
 class Switch_Euler_step(nn.Module):
     def __init__(self, network, device, num_iters, time_step = 1): 
         super(Switch_Euler_step, self).__init__()
+        #self.hyper_net = hyper_net
         self.network = network
         self.device = device
         self.num_iters = num_iters
@@ -155,7 +156,7 @@ class Switch_Euler_step(nn.Module):
         return
     
     def explicit_forward(self, u_0):
-       return u_0 + self.network(u_0)
+       return u_0 + self.time_step*self.network(u_0,u_0)
     
     def implicit_forward(self, u_0):
         u_1 = u_0.to(self.device) + self.time_step*(self.network(u_0.to(self.device), u_0.to(self.device)))
@@ -165,8 +166,10 @@ class Switch_Euler_step(nn.Module):
            iter += 1
         return u_1
     
-    def explicit_backwards(self, u_1):
-       return u_1 - self.network(u_1)
+    def explicit_backwards(self, u_0, u_1):
+        #mods = self.hyper_net(u_0)
+        #return u_1 - self.time_step*self.network(u_1,mods)
+        return u_1 - self.time_step*self.network(u_0,u_1)
     
     def implicit_backwards(self, u_1):
         u_0 = u_1.to(self.device) - self.time_step*(self.network(u_1.to(self.device)))

@@ -14,6 +14,8 @@ from nn_step_methods import *
 #from nn_spectral_loss import spectral_loss
 #from nn_jacobian_loss import *
 from hyper_fno import HyperNetwork
+from hyper_fno import Modulations
+import wandb
 
 time_step = 1e-1
 lead = int((1/1e-3)*time_step)
@@ -44,10 +46,8 @@ input_size = 1024
 output_size = 1024
 hidden_layer_size = 2000
 
-
 epochs = 60
-# batch_size = 50
-batch_size = 100
+batch_size = 20
 batch_time = 2
 print('Batch size ', batch_size)
 wavenum_init = 100
@@ -55,7 +55,7 @@ lamda_reg = 5
 evalN = 10000
 batch_time_test = 20
 print('Batch time test: '+str(batch_time_test))
-
+print(data.shape)
 def Dataloader(data,batch_size,batch_time, key):
     time_chunks = []
     for i in range(data.shape[0] - batch_time*lead):
@@ -77,12 +77,15 @@ device = 'cuda'  #change to cpu if no cuda available
 modes = 256 # number of Fourier modes to multiply
 width = 256  # input and output channels to the FNO layer
 in_dim = input_size
-hyper_hidden = 256
-learning_rate = 1e-5
+hyper_hidden = in_dim * 2
+learning_rate = 1e-4
 lr_decay = 0.4
 
 mynet = FNO1d(modes, width, 1, 1).cuda()
-my_hypernet = HyperNetwork(in_dim, hyper_hidden, mynet).cuda()
+my_hypernet = HyperNetwork(in_dim, hyper_hidden, mynet, device).cuda()
+#num_modulations = mynet.num_modulations
+#num_layers = 2
+#my_hypernet = Modulations(in_dim, hyper_hidden,num_modulations,num_layers,device).cuda()
 # mynet.load_state_dict(torch.load(net_file_path))
 # print('state dict loaded')
 
@@ -92,7 +95,7 @@ step_net = Switch_Euler_step(my_hypernet, device, time_step)
 
 optimizer = optim.AdamW(mynet.parameters(), lr=learning_rate)
 scheduler = optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
-optimizer_hyper = optim.AdamW(my_hypernet.parameters(), lr = learning_rate/10)
+optimizer_hyper = optim.AdamW(my_hypernet.parameters(), lr = 1e-6)
 scheduler_hyper = optim.lr_scheduler.ExponentialLR(optimizer_hyper, 0.95)
 
 rng = np.random.default_rng()
@@ -103,6 +106,7 @@ train_data = torch.from_numpy(train_data).float()
 rng = np.random.default_rng()
 key = rng.integers(100, size=1)
 test_data = Dataloader(data[:,trainN+lead:].T, batch_size = batch_size, batch_time = batch_time_test, key=key)
+print("Data Loaded")
 test_data = torch.from_numpy(test_data).float()
 
 class Loss_Multistep(nn.Module):
@@ -113,12 +117,13 @@ class Loss_Multistep(nn.Module):
         self.loss_func = loss_func
 
     def forward(self, batch):        
-        x_i = self.model.implicit_forward(batch[:,0])
-        loss = self.loss_func(x_i, batch[:,1])
-        #batch_time = 2 so loop never executes
-        for i in range(2, self.batch_time):
+        x_i = self.model.explicit_backwards(batch[:,0],batch[:,1]) 
+        loss = self.loss_func(x_i, batch[:,0])
+        '''
+        for i in range(self.batch_time, 2,-1):
             x_i = self.model.implicit_forward(x_i.detach())
             loss += self.loss_func(x_i, batch[:,i])
+        '''
         return loss
 
 
@@ -127,9 +132,35 @@ loss_func = lambda e: torch.linalg.norm(e, dim=1).mean(0)
 
 loss_net_test = Loss_Multistep(step_net, batch_time_test, loss_fn)
 
+'''
+run = wandb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="evan-rantala-university-of-california",
+        # Set the wandb project where this run will be logged.
+        project="Hyper_FNO",
+        # Track hyperparameters and run metadata.
+        config={
+            "FNO learning_rate":1e-4,
+            "Hyper learning rate": 1e-6,
+            "architecture": "Rank 1 HyperNet Updates-FNO Main Network",
+            "dataset": "KS",
+            "batch_size": 20,
+            "Modes": 256,
+            "Width": 256,
+            "epochs": 50,
+            "loss_fn": "MSE",
+            "optimizer": "AdamW",
+        },
+    )
+wandb.define_metric("global_step")
+wandb.define_metric("batch/*", step_metric="global_step")
+wandb.define_metric("epoch")
+wandb.define_metric("epoch/*", step_metric="epoch")
+'''
 
 torch.set_printoptions(precision=10)
 best_loss = 1e5
+global_step = 0
 for ep in range(starting_epoch, epochs+1):
     running_loss = 0.0
     for n in range(train_data.shape[0]):
@@ -142,8 +173,15 @@ for ep in range(starting_epoch, epochs+1):
         
         optimizer.step()
         optimizer_hyper.step()
+        '''
+        run.log({
+                "global_step": global_step,
+                "batch/loss_total": loss.item(),
+            })
+        '''
         running_loss += loss.detach().item()
         print(loss)
+        global_step += 1
 
     net_loss = (running_loss/(train_data.shape[0]))
     key = np.random.randint(len(test_data))
@@ -152,8 +190,14 @@ for ep in range(starting_epoch, epochs+1):
     scheduler.step()
     scheduler_hyper.step()
     print(f'Epoch : {ep}, Train Loss : {net_loss/(batch_time-1)}, Test Loss : {test_loss/(batch_time_test-1)}')
-    print('Learning rate', scheduler._last_lr)
-    
+    print('Learning rate', scheduler_hyper._last_lr)
+    '''
+    run.log({
+            "epoch": ep,
+            "epoch/loss": net_loss/(batch_time-1),
+            "epoch/test_loss": test_loss/(batch_time_test-1),
+        })
+    '''
     if best_loss > test_loss:
         print('Saved!!!')
         torch.save(mynet.state_dict(), chkpts_path_outputs+str(net_name)+'/'+'chkpt_'+net_name+'.pt')
