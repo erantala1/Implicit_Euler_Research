@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 #from torchinfo import summary
-#from count_trainable_params import count_parameters
+from count_trainable_params import count_parameters
 import pickle
 from nn_FNO import FNO1d
 from nn_step_methods import *
@@ -21,7 +21,7 @@ time_step = 1e-1
 lead = int((1/1e-3)*time_step)
 print(lead, 'FNO')
 
-net_name = 'Hyper_FNO_ImplicitEulerstep_lead'+str(lead)+'_train_multistep'
+net_name = 'Hyper_FNO_ExplicitBackwards_lead'+str(lead)+'_train_multistep'
 print(net_name)
 
 chkpts_path_outputs = '/glade/derecho/scratch/erantala/project_runs/model_chkpts'
@@ -83,20 +83,30 @@ lr_decay = 0.4
 
 mynet = FNO1d(modes, width, 1, 1).cuda()
 my_hypernet = HyperNetwork(in_dim, hyper_hidden, mynet, device).cuda()
-#num_modulations = mynet.num_modulations
-#num_layers = 2
-#my_hypernet = Modulations(in_dim, hyper_hidden,num_modulations,num_layers,device).cuda()
-# mynet.load_state_dict(torch.load(net_file_path))
-# print('state dict loaded')
+
+'''
+ckpt = torch.load(net_file_path, map_location=device)
+mynet.load_state_dict(ckpt["mynet"])
+my_hypernet.load_state_dict(ckpt["my_hypernet"])
+'''
 
 step_net = Switch_Euler_step(my_hypernet, device, time_step)
 
-#count_parameters(mynet)
+count_parameters(mynet)
+count_parameters(my_hypernet)
 
 optimizer = optim.AdamW(mynet.parameters(), lr=learning_rate)
 scheduler = optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
 optimizer_hyper = optim.AdamW(my_hypernet.parameters(), lr = 1e-6)
 scheduler_hyper = optim.lr_scheduler.ExponentialLR(optimizer_hyper, 0.95)
+
+'''
+optimizer.load_state_dict(ckpt["optimizer"])
+optimizer_hyper.load_state_dict(ckpt["optimizer_hyper"])
+scheduler.load_state_dict(ckpt["scheduler"])
+scheduler_hyper.load_state_dict(ckpt["scheduler_hyper"])
+starting_epoch = ckpt.get("epoch", 0)
+'''
 
 rng = np.random.default_rng()
 key = rng.integers(100, size=1)
@@ -200,15 +210,37 @@ for ep in range(starting_epoch, epochs+1):
     '''
     if best_loss > test_loss:
         print('Saved!!!')
-        torch.save(mynet.state_dict(), chkpts_path_outputs+str(net_name)+'/'+'chkpt_'+net_name+'.pt')
+        torch.save({"mynet": mynet.state_dict(), 
+            "my_hypernet": my_hypernet.state_dict(), 
+            "optimizer": optimizer.state_dict(), 
+            "optimizer_hyper": optimizer_hyper.state_dict(), 
+            "scheduler": scheduler.state_dict(), 
+            "scheduler_hyper": scheduler_hyper.state_dict(), 
+            "epoch": ep}, 
+            chkpts_path_outputs+'/'+str(net_name)+'/'+'chkpt_'+net_name+'.pt')
         print('Checkpoint updated')
-        print(chkpts_path_outputs+str(net_name)+'/'+'chkpt_'+net_name+'.pt')
+        print(chkpts_path_outputs+'/'+str(net_name)+'/'+'chkpt_'+net_name+'.pt')
         best_loss = test_loss
 
     if ep % 10 == 0:
-        print(chkpts_path_outputs+str(net_name)+'/'+'chkpt_'+net_name+'_epoch_'+str(ep)+'.pt')
-        torch.save(mynet.state_dict(), chkpts_path_outputs+str(net_name)+'/'+'chkpt_'+net_name+'_epoch_'+str(ep)+'.pt')
+        print(chkpts_path_outputs+'/'+str(net_name)+'/'+'chkpt_'+net_name+'_epoch_'+str(ep)+'.pt')
+        torch.save(mynet.state_dict(), chkpts_path_outputs+'/'+str(net_name)+'/'+'chkpt_'+net_name+'_epoch_'+str(ep)+'.pt')
+        torch.save({"mynet": mynet.state_dict(), 
+            "my_hypernet": my_hypernet.state_dict(), 
+            "optimizer": optimizer.state_dict(), 
+            "optimizer_hyper": optimizer_hyper.state_dict(), 
+            "scheduler": scheduler.state_dict(), 
+            "scheduler_hyper": scheduler_hyper.state_dict(), 
+            "epoch": ep}, 
+            chkpts_path_outputs+'/'+str(net_name)+'/'+'chkpt_'+net_name+'_epoch_'+str(ep)+'.pt')
 
-torch.save(mynet.state_dict(), net_chkpt_path+'chkpt_'+net_name+'_final.pt')
+torch.save({"mynet": mynet.state_dict(), 
+            "my_hypernet": my_hypernet.state_dict(), 
+            "optimizer": optimizer.state_dict(), 
+            "optimizer_hyper": optimizer_hyper.state_dict(), 
+            "scheduler": scheduler.state_dict(), 
+            "scheduler_hyper": scheduler_hyper.state_dict(), 
+            "epoch": ep}, 
+            net_chkpt_path+'chkpt_'+net_name+'_final.pt')
 torch.set_printoptions(precision=4)
 print("Model Saved")
