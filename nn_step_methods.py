@@ -3,7 +3,7 @@ import torch
 print(torch.__version__)
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torch.func import functional_call
 
 
 
@@ -58,7 +58,7 @@ class Euler_step(nn.Module):
         self.time_step = time_step
 
     def forward(self, input_batch):
-      return input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device)))
+      return input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device),input_batch.to(self.device)))
 
 
 class PEC4_step(nn.Module):
@@ -141,52 +141,60 @@ class Implicit_Euler_step(nn.Module):
         return output, torch.stack(jacobians), torch.stack(eigs), torch.stack(eigvecs) 
 
 class Switch_Euler_step(nn.Module):
-    def __init__(self, network, device, num_iters, time_step = 1): 
+    def __init__(self, network, hyper_network, device, num_iters, time_step = 1): 
         super(Switch_Euler_step, self).__init__()
-        #self.hyper_net = hyper_net
         self.network = network
+        self.hyper_network = hyper_network
         self.device = device
         self.num_iters = num_iters
-        # self.time_step = nn.Parameter(torch.ones(1))
         self.time_step = time_step
 
     def change_num_iters(self, num_iters):
         self.num_iters = num_iters
         print('New iters: ',self.num_iters)
         return
-    
-    def explicit_forward(self, u_0):
-       return u_0 + self.time_step*self.network(u_0,u_0)
-    
-    def implicit_forward(self, u_0):
-        u_1 = u_0.to(self.device) + self.time_step*(self.network(u_0.to(self.device), u_0.to(self.device)))
+
+    def implicit_forward_fno(self, u_0):
+        u_1 = u_0.to(self.device) + self.time_step*(self.network(u_0.to(self.device)))
         iter = 0
         while iter < self.num_iters:
-           u_1 = self.implicit_forwards_inner(u_0, u_1)
+           u_1 = self.implicit_forwards_inner_fno(u_0, u_1)
            iter += 1
         return u_1
-    
+
+    def implicit_forwards_inner_fno(self, u_0, u_1):
+        return u_0.to(self.device) + self.time_step*(self.network(u_1.to(self.device)))
+
     def explicit_backwards(self, u_0, u_1):
-        #mods = self.hyper_net(u_0)
-        #return u_1 - self.time_step*self.network(u_1,mods)
-        return u_1 - self.time_step*self.network(u_0,u_1)
+        new_params = self.hyper_network(u_0.to(self.device))
+        return u_1 - self.time_step*torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device))
     
-    def implicit_backwards(self, u_1):
-        u_0 = u_1.to(self.device) - self.time_step*(self.network(u_1.to(self.device)))
+    def batch_functional(self, params, u):
+        return functional_call(self.network, params, (u.unsqueeze(0),),strict=True).squeeze(0)
+
+    def hyper_implicit_forward(self, u_0):
+        new_params = self.hyper_network(u_0.to(self.device))
+        u_1 = u_0.to(self.device) + self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_0.to(self.device)))
         iter = 0
         while iter < self.num_iters:
-           u_0 = self.implicit_backwards_inner(u_1, u_0)
+           u_1 = self.hyper_implicit_forwards_inner(u_0, u_1, new_params)
+           iter += 1
+        return u_1
+    def hyper_implicit_forwards_inner(self, u_0, u_1, new_params):
+        return u_0.to(self.device) + self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device)))
+
+    '''
+    def train_implicit(self, loss_func, u_0, u_1):
+       return loss_func(self.implicit_backwards(u_0,u_1), u_0)
+    
+    def implicit_backwards(self, u_0,u_1):
+        new_params = self.hyper_network(u_0.to(self.device))
+        u_0 = u_1.to(self.device) - self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device)))
+        iter = 0
+        while iter < self.num_iters:
+           u_0 = self.implicit_backwards_inner(u_0, u_1, new_params)
            iter += 1
         return u_0
-
-    def implicit_forwards_inner(self, u_0, u_1):
-        return u_0.to(self.device) + self.time_step*(self.network(u_0.to(self.device),u_1.to(self.device)))
-    
-    def implicit_backwards_inner(self, u_0, u_1):
-        return u_0.to(self.device) - self.time_step*(self.network(u_1.to(self.device)))
-    
-    def train_explicit(self, loss_func, u_0, u_1):
-       return loss_func(self.explicit_backwards(u_1), u_0)
-
-    def train_implicit(self, loss_func, u_0, u_1):
-       return loss_func(self.implicit_backwards(u_1), u_0)
+    def implicit_backwards_inner(self, u_0, u_1, new_params):
+        return u_0.to(self.device) - self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device)))
+    '''
