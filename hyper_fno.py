@@ -5,6 +5,8 @@ from nn_FNO import FNO1d
 from torch.func import functional_call
 import torch.nn.functional as F
 from torch.func import vmap
+
+#mlp class to be used by hypernet
 class MLP_net_variable(nn.Module):
     def __init__(self, in_dim, out_dim, hidden_dim, num_layers, activation=F.gelu, use_act = True, use_dropout=True):
         super().__init__()
@@ -38,8 +40,11 @@ class MLP_net_variable(nn.Module):
             x = self.activation(x)
         return x
 
+#main hypernetwork class
+#creates mlp, each with specified number of layers and hidden dim, for each param of outer network
+#returns dictionary with updates for main network's params
 class HyperNetwork(nn.Module):
-    def __init__(self, in_dim, hyper_hidden, network, device):
+    def __init__(self, num_mlp_layers, in_dim, hyper_hidden_scale, skip_conv, rank, network, device):
         super().__init__()
         self.fno = network.to(device)
         self.device = device
@@ -47,32 +52,45 @@ class HyperNetwork(nn.Module):
         self.shapes = []
         self.is_complex = []
         self.hyper_layers = nn.ModuleList()
+        self.flop_mode = False
+        self.indices = {}
+        self.train_mode = False
+        self.num_mlp_layers = num_mlp_layers
+        self.hyper_hidden_scale = hyper_hidden_scale
+        self.skip_conv = skip_conv
+        self.rank = rank
 
-        #for each parameter there will be a simple two linear layer mlp
-        #keep track of whether param is complex, output dim is doubled
-        #spectral conv special case
-        for name, param in self.fno.named_parameters():
-            self.names.append(name)
-            self.shapes.append(param.shape)
-            #print(f"param shape: {param.shape}")
-            self.is_complex.append(param.is_complex())
-            out_dim = sum(param.shape)
-            if param.is_complex():
-                out_dim *= 2
-            hyper_hidden_layer = out_dim * 2
-            mlp = MLP_net_variable(in_dim, out_dim, hyper_hidden_layer, num_layers=3, activation=F.gelu, use_act = False, use_dropout=False).to(device)
-            self.hyper_layers.append(mlp)
-            #print("mlp initialized")
+        #each mlp's output dimension will be the sum of the outer network parameter's shape
+        for i in range(self.rank):
+            for name, param in self.fno.named_parameters():
+                if self.skip_conv is True:
+                    if name.startswith("conv"):
+                        continue
+                self.names.append(name)
+                self.shapes.append(param.shape)
+                self.is_complex.append(param.is_complex())
+                out_dim = sum(param.shape)
+                if param.is_complex():
+                    out_dim *= 2
+                hyper_hidden_layer = int(out_dim * hyper_hidden_scale)
+                mlp = MLP_net_variable(in_dim, out_dim, hyper_hidden_layer, self.num_mlp_layers, activation=F.gelu, use_act = False, use_dropout=False).to(device)
+                self.indices[name+f"{i}"] = len(self.hyper_layers)
+                #print(f"rank {i}, mlp: {name}")
+                self.hyper_layers.append(mlp)
 
+    #mlp output dimension is sum of shape
+    #output will be split along param shape
     def make_vectors(self, mlp_out, param_shape):
         return list(mlp_out.split(param_shape, dim=1))
-
+    
+    #complex case where there are twice as many vectors (real and im)
     def split_complex(self, mlp_out, param_shape):
         real, imag = mlp_out.chunk(2,dim=1)
         update_real = self.make_vectors(real, param_shape)
         update_imag = self.make_vectors(imag, param_shape)
         return update_real, update_imag
     
+    #makes rank 1 outer product between each of the mlp output vectors
     def broadcasting(self, vecs, param_shape):
         #vecs is a list containing each tensor to be used in outer product
         if len(vecs) == 3:
@@ -92,42 +110,42 @@ class HyperNetwork(nn.Module):
             update = vecs[0]
         return update
 
-    def batch_functional(self, params, u):
-        #print(f"u shape: {u.shape}")
-        return functional_call(self.fno, params, (u.unsqueeze(0),),strict=True).squeeze(0)
-
-    def forward(self, u_0, u_1):
-        vec_u = u_0.reshape(u_0.shape[0],-1)
-        new_params = OrderedDict()
-        for name, param_shape, mlp, cplx in zip(self.names, self.shapes, self.hyper_layers, self.is_complex):
-            flat = mlp(vec_u)
-            if cplx:
-                update_real, update_imag = self.split_complex(flat,param_shape)
-                update = torch.complex(self.broadcasting(update_real, param_shape), self.broadcasting(update_imag, param_shape))
-            else:
-                vecs = self.make_vectors(flat,param_shape)
-                update = self.broadcasting(vecs, param_shape)
-            
-            for param_name, parameter in self.fno.named_parameters():
-                if param_name == name:
-                    break
-            new_params[name] = parameter + update
-        return torch.vmap(self.batch_functional, in_dims = (0,0))(new_params, u_1)
-
-#new shifts/scales hypernet class
-class Modulations(nn.Module):
-    def __init__(self, in_dim, hidden_dim, num_modulations, num_layers, device):
-        super().__init__()
-        self.device = device
-        self.in_dim  = in_dim
-        self.hidden_dim = hidden_dim
-        self.num_modulations = num_modulations
-        self.num_layers = num_layers
-        self.mlp = mlp = MLP_net_variable(self.in_dim, self.num_modulations, self.hidden_dim, num_layers=self.num_layers, activation=F.gelu, use_act = False, use_dropout=False).to(device)
-
+    #update function used for each param
+    #split mlp output into vectors, then make outer product update
+    #real and imag update for complex param
+    def make_update(self, flat, param):
+        if param.is_complex():
+            real, imag = flat.chunk(2, dim=1)
+            upd_r = self.broadcasting(self.make_vectors(real, param.shape), param.shape)
+            upd_i = self.broadcasting(self.make_vectors(imag, param.shape), param.shape)
+            update = torch.complex(upd_r, upd_i)
+        else:
+            vecs = self.make_vectors(flat, param.shape)
+            update = self.broadcasting(vecs, param.shape)
+        return update
+    
+    #for each param make rank number of updates and add to each parameter
+    #returns dictionary of updated parameters to be used in functional_call
+    #skip spectral convolution params
     def forward(self, u_0):
-        vec_u = u_0.reshape(u_0.shape[0],-1)
-        out = self.mlp(vec_u)
-        return out
-        #output shape of [B,num_modulations]
+        B = u_0.shape[0]
+        vec_u = u_0.reshape(B, -1)
+        new_params = OrderedDict()
 
+        for name, param in self.fno.named_parameters():              
+            if name.startswith("conv"):
+                new_params[name] = param.unsqueeze(0).expand(B, *param.shape)
+            else:
+
+                for i in range(self.rank):
+                    index = self.indices[name+f"{i}"]
+                    mlp = self.hyper_layers[index]
+                    flat = mlp(vec_u)
+                    update = self.make_update(flat, param)
+                    if i == 0:
+                        new_params[name] = param.unsqueeze(0) + update
+                    else:
+                        new_params[name] += update
+
+        return new_params
+    
