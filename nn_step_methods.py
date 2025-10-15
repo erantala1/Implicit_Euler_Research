@@ -58,7 +58,7 @@ class Euler_step(nn.Module):
         self.time_step = time_step
 
     def forward(self, input_batch):
-      return input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device),input_batch.to(self.device)))
+      return input_batch.to(self.device) + self.time_step*(self.network(input_batch.to(self.device)))
 
 
 class PEC4_step(nn.Module):
@@ -183,7 +183,7 @@ class Switch_Euler_step(nn.Module):
     def hyper_implicit_forwards_inner(self, u_0, u_1, new_params):
         return u_0.to(self.device) + self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device)))
 
-    '''
+    
     def train_implicit(self, loss_func, u_0, u_1):
        return loss_func(self.implicit_backwards(u_0,u_1), u_0)
     
@@ -197,4 +197,6 @@ class Switch_Euler_step(nn.Module):
         return u_0
     def implicit_backwards_inner(self, u_0, u_1, new_params):
         return u_0.to(self.device) - self.time_step*(torch.vmap(self.batch_functional, in_dims=(0, 0))(new_params, u_1.to(self.device)))
-    '''
+
+    def altered_forward(self, u_0, u_1):
+        return u_0.to(self.device) + self.time_step*(self.network(u_1.to(self.device)))

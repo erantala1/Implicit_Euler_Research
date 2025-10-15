@@ -44,7 +44,8 @@ class MLP_net_variable(nn.Module):
 #creates mlp, each with specified number of layers and hidden dim, for each param of outer network
 #returns dictionary with updates for main network's params
 class HyperNetwork(nn.Module):
-    def __init__(self, num_mlp_layers, in_dim, hyper_hidden_scale, skip_conv, rank, network, device):
+    #def __init__(self, num_mlp_layers, in_dim, hyper_hidden_scale, skip_conv, skip_bias, rank, network, device):
+    def __init__(self, num_mlp_layers, in_dim, hyper_hidden_scale, which_params, rank, network, device):
         super().__init__()
         self.fno = network.to(device)
         self.device = device
@@ -52,20 +53,27 @@ class HyperNetwork(nn.Module):
         self.shapes = []
         self.is_complex = []
         self.hyper_layers = nn.ModuleList()
-        self.flop_mode = False
         self.indices = {}
-        self.train_mode = False
         self.num_mlp_layers = num_mlp_layers
         self.hyper_hidden_scale = hyper_hidden_scale
-        self.skip_conv = skip_conv
+        #self.skip_conv = skip_conv
+        #self.skip_bias = skip_bias
         self.rank = rank
+        self.which_params = which_params
 
         #each mlp's output dimension will be the sum of the outer network parameter's shape
         for i in range(self.rank):
             for name, param in self.fno.named_parameters():
+                if name not in self.which_params:
+                    continue
+                '''
                 if self.skip_conv is True:
                     if name.startswith("conv"):
                         continue
+                if self.skip_bias is True:
+                    if "bias" in name:
+                        continue
+                '''
                 self.names.append(name)
                 self.shapes.append(param.shape)
                 self.is_complex.append(param.is_complex())
@@ -75,8 +83,8 @@ class HyperNetwork(nn.Module):
                 hyper_hidden_layer = int(out_dim * hyper_hidden_scale)
                 mlp = MLP_net_variable(in_dim, out_dim, hyper_hidden_layer, self.num_mlp_layers, activation=F.gelu, use_act = False, use_dropout=False).to(device)
                 self.indices[name+f"{i}"] = len(self.hyper_layers)
-                #print(f"rank {i}, mlp: {name}")
                 self.hyper_layers.append(mlp)
+                print(f"Name:{name}")
 
     #mlp output dimension is sum of shape
     #output will be split along param shape
@@ -126,17 +134,22 @@ class HyperNetwork(nn.Module):
     
     #for each param make rank number of updates and add to each parameter
     #returns dictionary of updated parameters to be used in functional_call
-    #skip spectral convolution params
     def forward(self, u_0):
         B = u_0.shape[0]
         vec_u = u_0.reshape(B, -1)
         new_params = OrderedDict()
 
         for name, param in self.fno.named_parameters():              
-            if name.startswith("conv"):
+            '''
+            if name.startswith("conv") and self.skip_conv:
+                new_params[name] = param.unsqueeze(0).expand(B, *param.shape)
+          
+            elif "bias" in name and self.skip_bias:
+                new_params[name] = param.unsqueeze(0).expand(B, *param.shape)
+            '''
+            if name not in self.which_params:
                 new_params[name] = param.unsqueeze(0).expand(B, *param.shape)
             else:
-
                 for i in range(self.rank):
                     index = self.indices[name+f"{i}"]
                     mlp = self.hyper_layers[index]
